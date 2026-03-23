@@ -1,0 +1,102 @@
+---
+name: Income Tax Calculator - GMT Measurement
+author: sushma-gampa87
+description: >
+  Energy and CO2 measurement of the Income Tax Calculator Flask API.
+  Tests the /calculate_tax and /tax_brackets API endpoints under load
+  to measure CPU, memory and energy consumption.
+
+services:
+
+  tax-calculator:
+    image: tax-calculator
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tax-calculator
+    healthcheck:
+      test: "curl -f http://localhost:5000/tax_brackets || exit 1"
+      interval: "10s"
+      timeout: "5s"
+      retries: 5
+      start_period: "15s"
+    log-stdout: true
+    log-stderr: true
+
+  test-runner:
+    image: curlimages/curl:latest
+    container_name: test-runner
+    depends_on:
+      tax-calculator:
+        condition: service_healthy
+    log-stdout: true
+
+flow:
+
+  - name: Warmup
+    container: test-runner
+    commands:
+      - type: console
+        command: sleep 5
+        note: Warmup - letting the app stabilize
+
+  - name: Baseline Idle
+    container: test-runner
+    commands:
+      - type: console
+        command: sleep 10
+        note: Idle baseline measurement - no load
+
+  - name: GET tax_brackets
+    container: test-runner
+    commands:
+      - type: console
+        command: curl -s http://tax-calculator:5000/tax_brackets
+        note: Fetch all tax brackets (GET request)
+      - type: console
+        command: sleep 2
+        note: Cooldown between tests
+
+  - name: POST calculate_tax - Low Income
+    container: test-runner
+    commands:
+      - type: console
+        command: >
+          curl -s -X POST http://tax-calculator:5000/calculate_tax
+          -H "Content-Type: application/json"
+          -d '{"income": 30000}'
+        note: Calculate tax for income $30,000
+      - type: console
+        command: sleep 2
+
+  - name: POST calculate_tax - High Income
+    container: test-runner
+    commands:
+      - type: console
+        command: >
+          curl -s -X POST http://tax-calculator:5000/calculate_tax
+          -H "Content-Type: application/json"
+          -d '{"income": 250000}'
+        note: Calculate tax for income $250,000
+      - type: console
+        command: sleep 2
+
+  - name: Load Test - 20 Sequential Requests
+    container: test-runner
+    commands:
+      - type: console
+        command: >
+          for i in $(seq 1 20); do
+            curl -s -X POST http://tax-calculator:5000/calculate_tax
+            -H "Content-Type: application/json"
+            -d "{\"income\": $((i * 10000))}" > /dev/null;
+          done
+        shell: sh
+        note: 20 sequential tax calculation requests with varying incomes
+
+  - name: Post-Load Cooldown
+    container: test-runner
+    commands:
+      - type: console
+        command: sleep 10
+        note: Post-load idle measurement
