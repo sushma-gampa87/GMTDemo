@@ -1,0 +1,89 @@
+name: GMT Energy Measurement (Eco CI)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  measure-energy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start GMT Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          task: start-measurement
+          send-data: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Flask
+        run: pip install flask
+
+      - name: Measure - Setup
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          task: get-measurement
+          label: 'Setup - Install Flask'
+
+      - name: Start Tax Calculator API
+        run: |
+          python income_tax_calculator.py &
+          sleep 5
+
+      - name: Verify app running
+        run: curl -sf http://localhost:5000/tax_brackets
+
+      - name: Test GET /tax_brackets
+        run: curl -s http://localhost:5000/tax_brackets
+
+      - name: Measure - GET tax brackets
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          task: get-measurement
+          label: 'GET /tax_brackets'
+
+      - name: Test POST calculate_tax
+        run: |
+          curl -s -X POST http://localhost:5000/calculate_tax \
+            -H "Content-Type: application/json" -d '{"income": 30000}'
+          curl -s -X POST http://localhost:5000/calculate_tax \
+            -H "Content-Type: application/json" -d '{"income": 250000}'
+
+      - name: Measure - Single API calls
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          task: get-measurement
+          label: 'POST /calculate_tax - Single calls'
+
+      - name: Load Test - 20 requests
+        run: |
+          for income in 10000 20000 30000 40000 50000 60000 70000 80000 90000 100000 110000 120000 150000 175000 200000 250000 300000 400000 500000 600000; do
+            curl -s -X POST http://localhost:5000/calculate_tax \
+              -H "Content-Type: application/json" \
+              -d "{\"income\": $income}" > /dev/null
+          done
+
+      - name: Measure - Load Test
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          task: get-measurement
+          label: 'Load Test - 20 API calls'
+
+      - name: Idle cooldown
+        run: sleep 10
+
+      - name: Measure - Idle
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          task: get-measurement
+          label: 'Post-load idle'
+
+      - name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          task: display-results
