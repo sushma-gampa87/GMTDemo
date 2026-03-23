@@ -15,11 +15,11 @@ services:
       dockerfile: Dockerfile
     container_name: tax-calculator
     healthcheck:
-      test: "curl -f http://localhost:5000/tax_brackets || exit 1"
+      test: "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/tax_brackets')\""
       interval: "10s"
       timeout: "5s"
-      retries: 5
-      start_period: "15s"
+      retries: 10
+      start_period: "30s"
     log-stdout: true
     log-stderr: true
 
@@ -61,10 +61,7 @@ flow:
     container: test-runner
     commands:
       - type: console
-        command: >
-          curl -s -X POST http://tax-calculator:5000/calculate_tax
-          -H "Content-Type: application/json"
-          -d '{"income": 30000}'
+        command: curl -s -X POST http://tax-calculator:5000/calculate_tax -H "Content-Type: application/json" -d '{"income": 30000}'
         note: Calculate tax for income $30,000
       - type: console
         command: sleep 2
@@ -73,26 +70,18 @@ flow:
     container: test-runner
     commands:
       - type: console
-        command: >
-          curl -s -X POST http://tax-calculator:5000/calculate_tax
-          -H "Content-Type: application/json"
-          -d '{"income": 250000}'
+        command: curl -s -X POST http://tax-calculator:5000/calculate_tax -H "Content-Type: application/json" -d '{"income": 250000}'
         note: Calculate tax for income $250,000
       - type: console
         command: sleep 2
 
-  - name: Load Test - 20 Sequential Requests
+  - name: Load Test - 10 Sequential Requests
     container: test-runner
     commands:
       - type: console
-        command: >
-          for i in $(seq 1 20); do
-            curl -s -X POST http://tax-calculator:5000/calculate_tax
-            -H "Content-Type: application/json"
-            -d "{\"income\": $((i * 10000))}" > /dev/null;
-          done
+        command: "for i in 10000 20000 30000 40000 50000 60000 70000 80000 90000 100000; do curl -s -X POST http://tax-calculator:5000/calculate_tax -H 'Content-Type: application/json' -d \"{\\\"income\\\": $i}\" > /dev/null; done"
         shell: sh
-        note: 20 sequential tax calculation requests with varying incomes
+        note: 10 sequential tax calculation requests with varying incomes
 
   - name: Post-Load Cooldown
     container: test-runner
